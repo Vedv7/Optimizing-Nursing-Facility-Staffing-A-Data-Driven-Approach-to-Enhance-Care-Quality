@@ -1,0 +1,614 @@
+
+# coding: utf-8
+
+# # Nursing Facility Staffing and Performance Analysis Project
+# 
+# 
+# # Introduction:
+# 
+# The objective of this project is to analyze nursing facility performance by integrating multiple datasets related to staffing levels, penalties, and performance metrics. The data involved comes from different sources, including daily nurse staffing, SNF (Skilled Nursing Facility) VBP (Value-Based Purchasing) performance, and penalties imposed on facilities. This project aims to investigate the relationship between staffing levels (RN and CNA hours), penalties, and performance scores. Additionally, we will assess the impact of various factors, such as facility size and census levels, on performance outcomes.
+# 
+# # The following steps will be carried out:
+# 
+# Data Preprocessing: Cleaning and merging different datasets related to nurse staffing, facility performance, and penalties. We will ensure the data is consistent and free of anomalies.
+# 
+# Hypothesis Testing: Formulating hypotheses to explore the relationships between staffing levels, facility performance, and penalties.
+# 
+# Data Analysis: Grouping and aggregating data to analyze performance scores, staffing levels, and penalties.
+# 
+# Visualization: Creating visual representations such as bar charts to present key insights derived from the data.
+# 
+# Conclusions: Drawing conclusions and making recommendations based on the findings to help improve nursing facility operations.
+# 
+# # Data Sources:
+# 
+# PBJ Daily Nurse Staffing Data (Q1 2024): Provides detailed information about daily nurse staffing levels, including hours worked by Registered Nurses (RN), Certified Nursing Assistants (CNA), and other staff.
+# SNF VBP Facility Performance Data (FY 2024): Contains performance metrics such as risk-standardized readmission rates, achievement scores, and incentive payment multipliers.
+# NH Penalties Data (August 2024): Lists penalties imposed on nursing facilities, including fine amounts and payment denial periods.
+# 
+# # Methodology:
+# 
+# Loading and Merging Datasets: The different datasets will be loaded, cleaned, and merged based on common identifiers such as CMS Certification Numbers (CCN). This step ensures that all relevant information is available in a single dataset for further analysis.
+# 
+# Data Analysis and Hypothesis Testing: Various hypotheses will be tested to assess the relationship between staffing levels, facility size, penalties, and performance outcomes. Aggregation and grouping of data will be performed based on facility size, census levels, and staffing categories.
+# 
+# Visualization and Reporting: The results will be visualized using bar charts and other graphical techniques to highlight patterns and trends in the data.
+# 
+# Conclusions and Recommendations: Based on the analysis, key insights will be derived regarding how staffing levels and facility size impact performance and what improvements can be recommended for better outcomes in nursing facilitie
+
+# In[13]:
+
+
+import pandas as pd
+
+# Loading the PBJ Daily Nurse Staffing Q1 2024 data (main file) and clean the column names
+pbj_file_path = r'C:\Users\vedas\Desktop\PBJ_Daily_Nurse_Staffing_Q1_2024.csv'
+pbj_data = pd.read_csv(pbj_file_path, encoding='ISO-8859-1')
+
+# Cleaning the columns to remove any BOM or extra characters
+pbj_data.columns = pbj_data.columns.str.replace('ï»¿', '')
+
+# Loading the SNF VBP Facility Performance data (File 2)
+vbp_performance_path = r'C:\Users\vedas\Desktop\20 data sets\FY_2024_SNF_VBP_Facility_Performance.csv'
+vbp_data = pd.read_csv(vbp_performance_path, encoding='ISO-8859-1')
+
+# Loading the NH Penalties data (File 11)
+penalties_file_path = r'C:\Users\vedas\Desktop\20 data sets\NH_Penalties_Aug2024.csv'
+penalties_data = pd.read_csv(penalties_file_path, encoding='ISO-8859-1')
+
+# Verifying columns to ensure they are now clean
+print("PBJ Data Columns (Cleaned):", pbj_data.columns)
+print("VBP Performance Data Columns:", vbp_data.columns)
+print("Penalties Data Columns:", penalties_data.columns)
+
+# Step 2: Merging PBJ data with VBP Facility Performance data on cleaned 'PROVNUM' and CMS Certification Number (CCN)
+merged_data_1 = pd.merge(pbj_data, vbp_data, how='left', left_on='PROVNUM', right_on='CMS Certification Number (CCN)')
+
+# Step 3: Merging the result with the Penalties data
+final_merged_data = pd.merge(merged_data_1, penalties_data, how='left', left_on='PROVNUM', right_on='CMS Certification Number (CCN)')
+
+# Step 4: Display the first few rows of the final merged data
+print(final_merged_data.head())
+
+# Step 5: Saving the merged data to a CSV file
+final_merged_data.to_csv(r'C:\Users\vedas\Desktop\20 data sets\merged_data.csv', index=False)
+
+# Optionally save to Excel
+final_merged_data.to_excel(r'C:\Users\vedas\Desktop\20 data sets\merged_data.xlsx', index=False)
+
+
+
+# # Hypothesis 1:
+# 
+# Facilities with lower registered nurse (RN) staffing hours have lower performance scores and are more likely to receive penalties.
+# 
+# Rationale:
+# Registered nurse (RN) staffing is crucial to the quality of care in nursing facilities. We expect that facilities with lower RN staffing hours will have lower performance scores and are more likely to receive penalties.
+# 
+# Relevant Data:
+# RN Staffing Hours (Hrs_RN)
+# Performance Score (Achievement Score, Performance Score from the VBP dataset)
+# Penalties (Penalty Type, Fine Amount)
+# 
+
+# In[14]:
+
+
+# Fill missing RN staffing hours with 0 (assuming no data means no hours)
+final_merged_data['Hrs_RN'] = final_merged_data['Hrs_RN'].fillna(0)
+
+# Fill missing performance scores with the mean score
+mean_performance_score = final_merged_data['Achievement Score'].mean()
+final_merged_data['Achievement Score'] = final_merged_data['Achievement Score'].fillna(mean_performance_score)
+
+# Fill missing penalty-related columns
+final_merged_data['Fine Amount'] = final_merged_data['Fine Amount'].fillna(0)  # No fine if missing
+final_merged_data['Penalty Type'] = final_merged_data['Penalty Type'].fillna('No Penalty')  # No penalty if missing
+
+# Define bins for RN staffing levels (adjust these bins based on the data)
+bins = [0, 30, 60, float('inf')]  # These are arbitrary thresholds for Low, Medium, and High RN staffing levels
+labels = ['Low', 'Medium', 'High']
+
+# Categorize based on RN hours
+final_merged_data['RN_Staffing_Level'] = pd.cut(final_merged_data['Hrs_RN'], bins=bins, labels=labels)
+
+# Group by RN staffing level and calculate mean performance score and total fines
+staffing_analysis = final_merged_data.groupby('RN_Staffing_Level').agg({
+    'Achievement Score': 'mean',
+    'Fine Amount': 'sum',
+    'PROVNUM': 'count'  # Count of facilities in each group
+}).reset_index()
+
+# Rename columns for better readability
+staffing_analysis.columns = ['RN Staffing Level', 'Average Performance Score', 'Total Fines', 'Facility Count']
+
+# Print the results
+print(staffing_analysis)
+
+# Optionally, save this to a CSV for further analysis
+staffing_analysis.to_csv(r'C:\Users\vedas\Desktop\20 data sets\staffing_analysis.csv', index=False)
+
+
+
+# In[16]:
+
+
+import matplotlib.pyplot as plt
+
+# Data for the charts (from the staffing_analysis dataframe)
+staffing_levels = ['Low', 'Medium', 'High']
+avg_performance_score = [27.727012, 28.815123, 29.775259]
+total_fines = [7.045977e+09, 4.511737e+09, 1.956086e+09]
+
+# Bar chart for Average Performance Score
+plt.figure(figsize=(8, 6))
+plt.bar(staffing_levels, avg_performance_score, color=['red', 'orange', 'green'])
+plt.title('Average Performance Score by RN Staffing Level')
+plt.xlabel('RN Staffing Level')
+plt.ylabel('Average Performance Score')
+plt.show()
+
+# Bar chart for Total Fines
+plt.figure(figsize=(8, 6))
+plt.bar(staffing_levels, total_fines, color=['blue', 'purple', 'cyan'])
+plt.title('Total Fines by RN Staffing Level')
+plt.xlabel('RN Staffing Level')
+plt.ylabel('Total Fines (in billions)')
+plt.show()
+
+
+# # Key Findings from the Data:
+# 
+# Key Findings from the Data:
+# Performance Scores:
+# 
+# Facilities with low RN staffing have the lowest average performance score (27.73).
+# Facilities with high RN staffing have the highest average performance score (29.78).
+# There is a clear positive correlation between RN staffing levels and performance scores. As RN staffing increases, performance scores improve.
+# Total Fines:
+# 
+# Facilities with low RN staffing have the highest total fines (~7.05 billion).
+# 
+# Facilities with high RN staffing have the lowest total fines (~1.96 billion).
+# There is a negative correlation between RN staffing levels and fines. Facilities with fewer RN hours tend to accumulate significantly higher penalties.
+# Facility Count:
+# 
+# The majority of facilities fall under the low staffing category, with a total count of 943,306, while only 251,530 facilities fall under the high staffing category.
+# Despite having fewer facilities, the high staffing group has significantly better outcomes (higher performance scores and lower fines).
+# Conclusion:
+# The data supports the hypothesis that facilities with lower RN staffing hours have lower performance scores and are more likely to receive penalties. Facilities with higher RN staffing hours tend to perform better and receive fewer penalties, suggesting that improving RN staffing levels could lead to better performance and reduced penalties.
+
+# # Hypothesis 2:
+# 
+# 
+# 
+# Facilities with more residents (higher census) tend to have lower RN staffing hours per resident, potentially leading to lower performance scores.
+# 
+# Rationale:
+# As the number of residents increases, the available nursing resources may become more strained, leading to fewer RN hours per resident. This could negatively impact care quality and performance scores.
+# 
+# Relevant Data:
+# Resident Census (MDScensus): The number of residents in a facility.
+# RN Staffing Hours (Hrs_RN): Total RN staffing hours.
+# Performance Score (Achievement Score): Facility performance score.
+# 
+
+# Steps:
+# Handle Missing Values:
+# 
+# Ensure that missing values in RN staffing hours (Hrs_RN) and resident census (MDScensus) are handled. We'll assume that missing RN hours can be filled with 0 and missing census data will be filled with 0 (if appropriate).
+# Calculate RN Staffing Hours Per Resident:
+# 
+# Calculate the ratio of RN staffing hours per resident by dividing the total RN staffing hours by the number of residents (Hrs_RN / MDScensus). This metric will help us understand staffing efficiency.
+# Categorize Facilities Based on Resident Census:
+# 
+# Facilities will be categorized into Low, Medium, and High census levels based on the number of residents, using predefined thresholds (bins).
+# Analyze the Relationship:
+# 
+# We will analyze the RN staffing hours per resident across different census levels and check if facilities with more residents have fewer RN hours per resident.
+# Additionally, we'll analyze how the performance score changes with census size.
+
+# In[17]:
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Step 1: Handle Missing Values
+# Fill missing values for census and RN hours with 0 (assuming no data means 0)
+final_merged_data['MDScensus'] = final_merged_data['MDScensus'].fillna(0)
+final_merged_data['Hrs_RN'] = final_merged_data['Hrs_RN'].fillna(0)
+
+# Step 2: Calculate RN Staffing Hours Per Resident
+# Calculate the RN staffing hours per resident
+final_merged_data['RN_Hours_Per_Resident'] = final_merged_data['Hrs_RN'] / final_merged_data['MDScensus']
+
+# Avoid division by zero (if there are facilities with 0 residents)
+final_merged_data['RN_Hours_Per_Resident'].replace([float('inf'), -float('inf')], 0, inplace=True)
+
+# Step 3: Categorize Facilities Based on Resident Census
+# Define bins for resident census
+bins = [0, 30, 60, 100, float('inf')]  # These are example thresholds, adjust based on the data distribution
+labels = ['Low Census', 'Medium Census', 'High Census', 'Very High Census']
+
+# Categorize based on resident census
+final_merged_data['Census_Level'] = pd.cut(final_merged_data['MDScensus'], bins=bins, labels=labels)
+
+# Step 4: Analyze the Relationship Between Census Size and RN Staffing Per Resident
+# Group by census level and calculate the mean RN hours per resident and average performance score
+census_analysis = final_merged_data.groupby('Census_Level').agg({
+    'RN_Hours_Per_Resident': 'mean',
+    'Achievement Score': 'mean',
+    'PROVNUM': 'count'  # Count of facilities in each group
+}).reset_index()
+
+# Rename columns for readability
+census_analysis.columns = ['Census Level', 'Average RN Hours per Resident', 'Average Performance Score', 'Facility Count']
+
+# Print the results
+print(census_analysis)
+
+# Step 5: Visualize the Results
+# Bar chart for RN Hours per Resident by Census Level
+plt.figure(figsize=(8, 6))
+plt.bar(census_analysis['Census Level'], census_analysis['Average RN Hours per Resident'], color=['red', 'orange', 'green', 'blue'])
+plt.title('Average RN Hours per Resident by Census Level')
+plt.xlabel('Census Level')
+plt.ylabel('Average RN Hours per Resident')
+plt.show()
+
+# Bar chart for Performance Score by Census Level
+plt.figure(figsize=(8, 6))
+plt.bar(census_analysis['Census Level'], census_analysis['Average Performance Score'], color=['purple', 'cyan', 'magenta', 'yellow'])
+plt.title('Average Performance Score by Census Level')
+plt.xlabel('Census Level')
+plt.ylabel('Average Performance Score')
+plt.show()
+
+# Optionally save the analysis to a CSV
+census_analysis.to_csv(r'C:\Users\vedas\Desktop\20 data sets\census_analysis.csv', index=False)
+
+
+# # Key Findings from the Data: 
+# 
+#  Hypothesis:  Facilities with more residents (higher census) tend to have lower RN staffing hours per resident, potentially leading to lower performance scores.
+# 
+# 1.RN Hours per Resident:
+# 
+# Low Census facilities have the highest average RN hours per resident (0.97).
+# Medium Census, High Census, and Very High Census facilities have progressively lower RN hours per resident, with Very High Census facilities having the lowest (0.38).
+# This shows a clear trend: as the number of residents increases, the available RN hours per resident decrease.
+# 
+# 2.Performance Scores:
+# 
+# Low Census facilities have the highest average performance score (29.26), while Very High Census facilities have the lowest (27.37).
+# There is a correlation between lower RN hours per resident and lower performance scores, supporting the idea that facilities with more residents and fewer RN hours per resident perform worse.
+# 
+# 3.Facility Distribution:
+# 
+# There are fewer Low Census facilities (151,039), while High Census and Very High Census facilities make up a much larger proportion (693,532 and 487,898, respectively).
+# The fact that many facilities operate with a higher resident load and lower RN staffing per resident highlights the challenge of maintaining care quality in larger facilities.
+# 
+# 4.Conclusion:
+# The data strongly supports the hypothesis. Facilities with more residents (higher census) have fewer RN staffing hours per resident, and this appears to negatively affect their performance scores. Facilities with low census are better staffed in terms of RN hours per resident and achieve higher performance scores, while high census facilities struggle with staffing efficiency and score lower in performance evaluations.
+# 
+# This suggests that managing RN staffing more effectively in higher census facilities could improve care quality and performance.
+
+# # Hypothesis 3 :
+# Facilities with higher RN (Registered Nurse) and CNA (Certified Nursing Assistant) staffing levels have better overall performance scores."
+# 
+# Rationale:
+# 
+# The quality of care in healthcare facilities is often closely tied to staffing levels. RN and CNA hours per resident per day could serve as an indicator of the amount of attention and care provided to residents. More staff time per resident might result in better care, which could lead to higher performance scores.
+# 
+# Steps and Approach
+# 
+# Handling Missing Values:
+# Missing values for RN hours and CNA hours are filled with the median of their respective columns. This helps to mitigate any inconsistencies due to missing data while still preserving the structure of the data. Missing performance scores are filled with the mean value.
+# 
+# Categorization of Staffing Levels:
+# 
+# The RN and CNA staffing hours are categorized into three bins:
+# 
+# Low: Below 2 hours per resident per day.
+# Medium: Between 2 and 4 hours per resident per day.
+# High: Above 4 hours per resident per day.
+# This allows us to segment the data and analyze how different staffing levels impact facility performance.
+# 
+# Analysis:
+# The data is grouped by these staffing levels to calculate the average performance score and facility count for each category of staffing levels (RN and CNA).
+# 
+# Visualization:
+# The bar charts visualize how average performance scores differ across RN and CNA staffing levels. This provides a clearer understanding of the relationship between staffing and performance.
+
+# In[22]:
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Step 1: Handle Missing Values
+# Fill missing RN and CNA staffing hours with the median values
+final_merged_data['Hrs_RN'] = final_merged_data['Hrs_RN'].fillna(final_merged_data['Hrs_RN'].median())
+final_merged_data['Hrs_CNA'] = final_merged_data['Hrs_CNA'].fillna(final_merged_data['Hrs_CNA'].median())
+
+# Fill missing performance scores with the mean
+final_merged_data['Performance Score'] = final_merged_data['Performance Score'].fillna(final_merged_data['Performance Score'].mean())
+
+# Step 2: Categorize Facilities Based on Staffing Levels
+# Define bins for RN and CNA staffing levels (Low, Medium, High)
+rn_bins = [0, 2, 4, float('inf')]  # Assuming RN hours per resident per day ranges from 0 to inf
+cna_bins = [0, 2, 4, float('inf')]  # Assuming CNA hours per resident per day ranges from 0 to inf
+labels = ['Low', 'Medium', 'High']
+
+# Categorize RN staffing levels
+final_merged_data['RN_Staffing_Level'] = pd.cut(final_merged_data['Hrs_RN'], bins=rn_bins, labels=labels)
+
+# Categorize CNA staffing levels
+final_merged_data['CNA_Staffing_Level'] = pd.cut(final_merged_data['Hrs_CNA'], bins=cna_bins, labels=labels)
+
+# Step 3: Analyze the Relationship Between Staffing and Performance Scores
+# Group by RN staffing level and calculate the mean performance score and facility count
+rn_staffing_analysis = final_merged_data.groupby('RN_Staffing_Level').agg({
+    'Performance Score': 'mean',
+    'PROVNUM': 'count'
+}).reset_index()
+
+# Group by CNA staffing level and calculate the mean performance score and facility count
+cna_staffing_analysis = final_merged_data.groupby('CNA_Staffing_Level').agg({
+    'Performance Score': 'mean',
+    'PROVNUM': 'count'
+}).reset_index()
+
+# Rename columns for readability
+rn_staffing_analysis.columns = ['RN Staffing Level', 'Average Performance Score', 'Facility Count']
+cna_staffing_analysis.columns = ['CNA Staffing Level', 'Average Performance Score', 'Facility Count']
+
+# Print the analysis results
+print("RN Staffing Analysis:\n", rn_staffing_analysis)
+print("CNA Staffing Analysis:\n", cna_staffing_analysis)
+
+# Step 4: Visualize the Results
+
+# Bar chart for RN Staffing Levels and Performance Scores
+plt.figure(figsize=(8, 6))
+plt.bar(rn_staffing_analysis['RN Staffing Level'], rn_staffing_analysis['Average Performance Score'], color=['green', 'orange', 'red'])
+plt.title('Average Performance Score by RN Staffing Level')
+plt.xlabel('RN Staffing Level')
+plt.ylabel('Average Performance Score')
+plt.show()
+
+# Bar chart for CNA Staffing Levels and Performance Scores
+plt.figure(figsize=(8, 6))
+plt.bar(cna_staffing_analysis['CNA Staffing Level'], cna_staffing_analysis['Average Performance Score'], color=['blue', 'purple', 'cyan'])
+plt.title('Average Performance Score by CNA Staffing Level')
+plt.xlabel('CNA Staffing Level')
+plt.ylabel('Average Performance Score')
+plt.show()
+
+# Optionally save the analysis to a CSV
+rn_staffing_analysis.to_csv(r'C:\Users\vedas\Desktop\20 data sets\rn_staffing_analysis.csv', index=False)
+cna_staffing_analysis.to_csv(r'C:\Users\vedas\Desktop\20 data sets\cna_staffing_analysis.csv', index=False)
+
+
+# 
+# # Analysis and Conclusion
+# Based on the provided results:
+# 
+# RN Staffing Analysis:
+# 
+# Low RN Staffing Level: Average Performance Score is 29.79, with a facility count of 8,870.
+# Medium RN Staffing Level: Average Performance Score is 29.54, with a facility count of 7,044.
+# High RN Staffing Level: Average Performance Score is 30.31, with a significant facility count of 1,728,145.
+# 
+# 
+# Conclusion:
+# The analysis shows that facilities with high RN staffing levels tend to have slightly better performance scores compared to those with low or medium staffing levels. This supports the idea that more RN hours per resident are correlated with improved performance outcomes in facilities. However, the difference is not large, suggesting that while staffing levels contribute, other factors may also influence the performance.
+# 
+# CNA Staffing Analysis:
+# 
+# Low CNA Staffing Level: Average Performance Score is 32.73, but with a very small facility count of 118.
+# Medium CNA Staffing Level: Average Performance Score is 30.73, with a facility count of 543.
+# High CNA Staffing Level: Average Performance Score is 30.21, with a large facility count of 1,886,864.
+# 
+# Conclusion:
+# For CNA staffing levels, the low staffing group shows the highest performance score (32.73), but this category contains very few facilities (118). The high CNA staffing group has a slightly lower performance score (30.21) despite the large number of facilities. This could indicate that CNA staffing has a more complex relationship with performance, possibly influenced by facility size, resident needs, or other operational factors.
+# 
+# General Conclusion:
+# RN Staffing Levels seem to have a more consistent positive correlation with performance scores, especially for facilities with high RN staffing.
+# CNA Staffing Levels exhibit a more varied result, where low CNA staffing performs well, but this is based on a very small sample size.
+# Facilities with high RN staffing are generally performing better, which highlights the importance of having a sufficient number of registered nurses in long-term care settings.
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+# 
+
+# # Hypothesis 4: 
+# 
+# Does Facility Size (Census Level) Impact Performance Scores?
+# 
+# Rationale:
+# 
+# It is important to understand if the size of a facility, as measured by the number of residents (census), impacts its performance. Larger facilities may face different challenges in maintaining performance due to the scale of operations, staffing, and resident care needs. Smaller facilities might have more personalized care, potentially leading to better performance scores. This hypothesis aims to explore whether performance scores vary significantly across different census levels.
+# 
+# Hypothesis:
+# 
+# Null Hypothesis (H₀): There is no significant difference in performance scores based on census levels.
+# Alternative Hypothesis (H₁): Facility size (census level) has a significant impact on performance scores, with larger facilities showing different performance trends compared to smaller ones.
+# 
+# Approach:
+# We will categorize the facilities into different census levels (Low, Medium, High, Very High) based on the number of residents (census). The performance scores for each group will be analyzed to identify any patterns or significant differences.
+# 
+# Steps:
+# 1.Handle missing values for census and performance scores.
+# 2.Categorize facilities into different census levels.
+# 3.Calculate the average performance score and facility count for each census category.
+# 4.Visualize the relationship between census levels and performance scores.
+# 5.Draw conclusions based on the analysis.
+
+# In[23]:
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Step 1: Handle Missing Values
+# Fill missing census and performance scores with median values
+final_merged_data['MDScensus'] = final_merged_data['MDScensus'].fillna(final_merged_data['MDScensus'].median())
+final_merged_data['Performance Score'] = final_merged_data['Performance Score'].fillna(final_merged_data['Performance Score'].median())
+
+# Step 2: Categorize Facilities Based on Census Levels
+# Define bins for census levels (Low, Medium, High, Very High)
+census_bins = [0, 50, 100, 200, float('inf')]  # Assuming census ranges from 0 to inf
+census_labels = ['Low Census', 'Medium Census', 'High Census', 'Very High Census']
+
+# Categorize census levels
+final_merged_data['Census_Level'] = pd.cut(final_merged_data['MDScensus'], bins=census_bins, labels=census_labels)
+
+# Step 3: Analyze the Relationship Between Census Levels and Performance Scores
+# Group by census level and calculate the mean performance score and facility count
+census_analysis = final_merged_data.groupby('Census_Level').agg({
+    'Performance Score': 'mean',
+    'PROVNUM': 'count'
+}).reset_index()
+
+# Rename columns for readability
+census_analysis.columns = ['Census Level', 'Average Performance Score', 'Facility Count']
+
+# Print the analysis results
+print("Census Analysis:\n", census_analysis)
+
+# Step 4: Visualize the Results
+
+# Bar chart for Census Levels and Performance Scores
+plt.figure(figsize=(8, 6))
+plt.bar(census_analysis['Census Level'], census_analysis['Average Performance Score'], color=['blue', 'green', 'orange', 'red'])
+plt.title('Average Performance Score by Census Level')
+plt.xlabel('Census Level')
+plt.ylabel('Average Performance Score')
+plt.show()
+
+# Optionally save the analysis to a CSV
+census_analysis.to_csv(r'C:\Users\vedas\Desktop\20 data sets\census_analysis.csv', index=False)
+
+
+# # Census Analysis Conclusion and Key Findings:
+# Census Level Analysis:
+# 
+# Low Census (Average Performance Score: 30.85, Facility Count: 507,078): Facilities with a lower resident census show strong performance scores, indicating they may have more manageable workloads and resources to focus on individual care.
+# 
+# Medium Census (Average Performance Score: 30.30, Facility Count: 901,709): Facilities with medium census levels have a slightly lower average performance score than those with low census, suggesting a potential strain on resources as resident numbers increase.
+# 
+# High Census (Average Performance Score: 28.94, Facility Count: 442,628): Facilities with a high resident census display the lowest average performance scores, indicating challenges in maintaining quality care and performance as resident numbers rise.
+# 
+# Very High Census (Average Performance Score: 33.18, Facility Count: 45,270): Surprisingly, facilities with a very high census have the highest average performance scores. This could indicate that some of the largest facilities are well-equipped with resources, staffing, or operational efficiency to manage large resident populations effectively.
+# 
+# Conclusion:
+# 
+# The analysis highlights that performance scores tend to drop as census levels increase, particularly for high census facilities. However, the spike in performance at the "Very High Census" level suggests that certain large facilities are excelling despite the increased demand. These successful large facilities may serve as models for high census facilities that struggle with performance.
+# 
+# It is likely that these very high-performing large facilities have optimized processes, staffing, or operational management that allow them to maintain high standards of care despite the large number of residents.
+
+# # Hypothesis 5:
+# 
+# Does Facility Size (Census Level) Impact RN and CNA Staffing Levels?
+# 
+# Rationale:
+# 
+# Facility size, as measured by the number of residents (census), may influence the staffing levels in terms of RN (Registered Nurse) and CNA (Certified Nursing Assistant) hours per resident. Larger facilities could have higher staffing needs to accommodate the complexity of caring for a greater number of residents. Smaller facilities, on the other hand, might have lower staffing demands. This hypothesis aims to explore how RN and CNA staffing levels vary based on the size of the facility.
+# 
+# Hypothesis:
+# 
+# Null Hypothesis (H₀): There is no significant difference in RN and CNA staffing levels based on facility size.
+# Alternative Hypothesis (H₁): Facility size has a significant impact on RN and CNA staffing levels, with larger facilities requiring more staffing per resident compared to smaller ones.
+# Approach:
+# We will categorize the facilities into different census levels (Small, Medium, Large) based on the number of residents. The RN and CNA staffing levels for each group will be analyzed to identify any patterns or significant differences.
+# 
+# Steps:
+# 
+# 1.Handle missing values for MDScensus, Hrs_RN, and Hrs_CNA.
+# 2.Categorize facilities into different size levels based on census (Small, Medium, Large).
+# 3.Calculate the average RN and CNA hours per resident for each facility size category.
+# 4.Visualize the relationship between facility size and RN/CNA staffing levels.
+# 5.Draw conclusions based on the analysis.
+
+# In[25]:
+
+
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Step 1: Handle Missing Values
+# Fill missing values for 'MDScensus', 'Hrs_RN', and 'Hrs_CNA'
+final_merged_data['MDScensus'] = final_merged_data['MDScensus'].fillna(final_merged_data['MDScensus'].median())
+final_merged_data['Hrs_RN'] = final_merged_data['Hrs_RN'].fillna(final_merged_data['Hrs_RN'].median())
+final_merged_data['Hrs_CNA'] = final_merged_data['Hrs_CNA'].fillna(final_merged_data['Hrs_CNA'].median())
+
+# Step 2: Categorize Facilities Based on Census Levels
+# Define bins for facility size (Small, Medium, Large)
+census_bins = [0, 50, 100, float('inf')]  # Small (0-50 residents), Medium (51-100 residents), Large (101+ residents)
+census_labels = ['Small', 'Medium', 'Large']
+
+# Categorize facilities based on census size
+final_merged_data['Facility Size'] = pd.cut(final_merged_data['MDScensus'], bins=census_bins, labels=census_labels)
+
+# Step 3: Analyze the Relationship Between Facility Size and Staffing Levels
+# Group by Facility Size and calculate the mean RN and CNA hours per resident and facility count
+facility_size_analysis = final_merged_data.groupby('Facility Size').agg({
+    'Hrs_RN': 'mean',
+    'Hrs_CNA': 'mean',
+    'PROVNUM': 'count'
+}).reset_index()
+
+# Rename columns for readability
+facility_size_analysis.columns = ['Facility Size', 'Average RN Hours per Resident', 'Average CNA Hours per Resident', 'Facility Count']
+
+# Print the analysis results
+print("Facility Size and Staffing Level Analysis:\n", facility_size_analysis)
+
+# Step 4: Visualize the Results
+
+# Bar chart for RN Hours by Facility Size
+plt.figure(figsize=(8, 6))
+plt.bar(facility_size_analysis['Facility Size'], facility_size_analysis['Average RN Hours per Resident'], color=['blue', 'green', 'orange'])
+plt.title('Average RN Hours per Resident by Facility Size')
+plt.xlabel('Facility Size')
+plt.ylabel('Average RN Hours per Resident')
+plt.show()
+
+# Bar chart for CNA Hours by Facility Size
+plt.figure(figsize=(8, 6))
+plt.bar(facility_size_analysis['Facility Size'], facility_size_analysis['Average CNA Hours per Resident'], color=['purple', 'red', 'cyan'])
+plt.title('Average CNA Hours per Resident by Facility Size')
+plt.xlabel('Facility Size')
+plt.ylabel('Average CNA Hours per Resident')
+plt.show()
+
+# Optionally save the analysis to a CSV
+facility_size_analysis.to_csv(r'C:\Users\vedas\Desktop\20 data sets\facility_size_analysis.csv', index=False)
+
+
+# # Conclusion and Key Findings:
+# 
+# Facility Size Analysis:
+# 
+# Small Facilities (Average RN Hours: 19.27, Average CNA Hours: 77.22, Facility Count: 507,078):
+# Small facilities, with fewer residents, require lower RN and CNA hours per resident, suggesting that these facilities may have more manageable workloads due to the smaller number of residents.
+# 
+# Medium Facilities (Average RN Hours: 28.79, Average CNA Hours: 150.35, Facility Count: 901,709):
+# As the facility size increases, medium-sized facilities require more staffing per resident compared to small facilities, reflecting the increasing complexity and care needs of a larger number of residents.
+# 
+# Large Facilities (Average RN Hours: 55.15, Average CNA Hours: 288.68, Facility Count: 487,898):
+# Large facilities have significantly higher RN and CNA staffing requirements, likely due to the greater number of residents needing more comprehensive care and attention. The data highlights that larger facilities must allocate more staffing resources to maintain a high standard of care.
+# 
+# Conclusion:
+# 
+# The analysis shows a strong positive correlation between facility size (measured by census level) and staffing levels. As facilities grow in size, both RN and CNA hours per resident increase substantially. This supports the hypothesis that larger facilities require more staffing to meet the needs of their residents. Managing larger facilities with sufficient staffing is crucial to ensure quality care.
+
+
+
+
